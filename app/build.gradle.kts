@@ -1,3 +1,7 @@
+import org.gradle.api.JavaVersion
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.util.*
+
 plugins {
     id("com.android.application")
     id("com.google.devtools.ksp")
@@ -7,95 +11,99 @@ plugins {
     id("kotlinx-serialization")
 }
 
-// Copy the signing.properties.sample file to ~/.sign/signing.properties and adjust the values.
-val PROD_PROPS_FILE = File(System.getProperty("user.home"), ".sign/signing.properties")
-val REPO_PROPS_FILE = File("repo.properties")
-val PROD_PROPS = loadProperties(PROD_PROPS_FILE)
-val REPO_PROPS = loadProperties(REPO_PROPS_FILE)
+val prodPropsFile = file("${System.getProperty("user.home")}/.sign/signing.properties")
+val repoPropsFile = file("repo.properties")
+val prodProps = loadProperties(prodPropsFile)
+val repoProps = loadProperties(repoPropsFile)
 
 fun computeVersionName(versionCode: Int, label: String): String {
-    return "2.7.$versionCode-$label-${java.time.LocalDate.now()}"
+    return "2.7.$versionCode-$label-${Date().format("yyyy-MM-dd")}"
 }
 
-val JAVA_VERSION = JavaVersion.VERSION_17
+val javaVersion = JavaVersion.VERSION_17
 
 android {
-    compileSdkVersion(34)
+    compileSdk = 34
+
     compileOptions {
         coreLibraryDesugaringEnabled(true)
-        sourceCompatibility = JAVA_VERSION
-        targetCompatibility = JAVA_VERSION
+
+        sourceCompatibility = javaVersion
+        targetCompatibility = javaVersion
     }
+
     kotlinOptions {
-        jvmTarget = JAVA_VERSION
+        jvmTarget = javaVersion
     }
+
     defaultConfig {
         applicationId = "org.wikipedia"
-        minSdkVersion(21)
-        targetSdkVersion(34)
+        minSdk = 21
+        targetSdk = 34
         versionCode = 50473
         testApplicationId = "org.wikipedia.test"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        testInstrumentationRunnerArguments["clearPackageData"] = "true"
+        testInstrumentationRunnerArguments(mapOf("clearPackageData" to "true"))
+
         vectorDrawables.useSupportLibrary = true
+
         signingConfig = signingConfigs.getByName("debug")
+
         buildConfigField("String", "DEFAULT_RESTBASE_URI_FORMAT", "\"%1\$s://%2\$s/api/rest_v1/\"")
         buildConfigField("String", "META_WIKI_BASE_URI", "\"https://meta.wikimedia.org\"")
         buildConfigField("String", "EVENTGATE_ANALYTICS_EXTERNAL_BASE_URI", "\"https://intake-analytics.wikimedia.org\"")
         buildConfigField("String", "EVENTGATE_LOGGING_EXTERNAL_BASE_URI", "\"https://intake-logging.wikimedia.org\"")
-        val TEST_LOGIN_USERNAME = System.getenv("TEST_LOGIN_USERNAME")
-        val TEST_LOGIN_PASSWORD = System.getenv("TEST_LOGIN_PASSWORD")
-        buildConfigField("String", "TEST_LOGIN_USERNAME", TEST_LOGIN_USERNAME?.let { "\"$it\"" } ?: "\"Foo\"")
-        buildConfigField("String", "TEST_LOGIN_PASSWORD", TEST_LOGIN_PASSWORD?.let { "\"$it\"" } ?: "\"Bar\"")
+        val testLoginUsername = System.getenv("TEST_LOGIN_USERNAME") ?: "Foo"
+        val testLoginPassword = System.getenv("TEST_LOGIN_PASSWORD") ?: "Bar"
+        buildConfigField("String", "TEST_LOGIN_USERNAME", "\"$testLoginUsername\"")
+        buildConfigField("String", "TEST_LOGIN_PASSWORD", "\"$testLoginPassword\"")
     }
+
     testOptions {
-        execution = TestExecution.ANDROIDX_TEST_ORCHESTRATOR
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
     }
+
     buildFeatures {
         viewBinding = true
         buildConfig = true
     }
+
     sourceSets {
-        create("prod") {
-            java.srcDirs += "src/extra/java"
-        }
-        create("beta") {
-            java.srcDirs += "src/extra/java"
-        }
-        create("alpha") {
-            java.srcDirs += "src/extra/java"
-        }
-        create("dev") {
-            java.srcDirs += "src/extra/java"
-        }
-        create("custom") {
-            java.srcDirs += "src/extra/java"
-        }
-        create("androidTest") {
-            assets.srcDirs += files("$projectDir/schemas".toString())
+        named("prod") { java.srcDirs("src/extra/java") }
+        named("beta") { java.srcDirs("src/extra/java") }
+        named("alpha") { java.srcDirs("src/extra/java") }
+        named("dev") { java.srcDirs("src/extra/java") }
+        named("custom") { java.srcDirs("src/extra/java") }
+
+        named("androidTest") {
+            assets.srcDirs(files("$projectDir/schemas"))
         }
     }
+
     signingConfigs {
         create("prod") {
-            setSigningConfigKey(this, PROD_PROPS)
+            setSigningConfigKey(this, prodProps)
         }
         create("debug") {
-            setSigningConfigKey(this, REPO_PROPS)
+            setSigningConfigKey(this, repoProps)
         }
     }
+
     buildTypes {
-        create("debug") {
+        named("debug") {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
             testProguardFiles("test-proguard-rules.pro")
         }
-        create("release") {
+        named("release") {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
             testProguardFiles("test-proguard-rules.pro")
         }
     }
+
     flavorDimensions("default")
+
     productFlavors {
         create("dev") {
             versionName = computeVersionName(defaultConfig.versionCode, "dev")
@@ -123,16 +131,18 @@ android {
         }
         create("custom") {
             versionName = computeVersionName(defaultConfig.versionCode, customChannel)
-            manifestPlaceholders["customChannel"] = getProperty("customChannel").toString()
+            manifestPlaceholders = mapOf("customChannel" to project.properties["customChannel"].toString())
             signingConfig = signingConfigs.getByName("prod")
         }
     }
+
     testOptions {
         unitTests {
             includeAndroidResources = true
             returnDefaultValues = true
         }
     }
+
     bundle {
         language {
             enableSplit(false)
@@ -146,9 +156,7 @@ ksp {
 }
 
 configurations {
-    compileClasspath {
-        extendsFrom(implementation)
-    }
+    compileClasspath.extendsFrom(implementation)
 }
 
 apply(from = "../gradle/src/test.gradle")
@@ -156,9 +164,11 @@ apply(from = "../gradle/src/checkstyle.gradle")
 apply(from = "../gradle/src/ktlint.gradle")
 
 dependencies {
+
     // To keep the Maven Central dependencies up-to-date
     // use http://gradleplease.appspot.com/ or http://search.maven.org/.
     // Debug with ./gradlew -q app:dependencies --configuration compile
+
     val okHttpVersion = "4.12.0"
     val retrofitVersion = "2.9.0"
     val glideVersion = "4.16.0"
@@ -171,11 +181,14 @@ dependencies {
     val espressoVersion = "3.5.1"
     val serializationVersion = "1.6.2"
     val metricsVersion = "2.3"
+
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinCoroutinesVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:$kotlinCoroutinesVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
+
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.core:core-ktx:1.12.0")
@@ -192,12 +205,15 @@ dependencies {
     implementation("androidx.drawerlayout:drawerlayout:1.2.0")
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     implementation("org.wikimedia.metrics:metrics-platform:$metricsVersion")
+
     implementation("com.github.michael-rapp:chrome-like-tab-switcher:0.4.6") {
         exclude(group = "org.jetbrains")
     }
+
     implementation("com.github.bumptech.glide:glide:$glideVersion")
     implementation("com.github.bumptech.glide:okhttp3-integration:$glideVersion")
     ksp("com.github.bumptech.glide:ksp:$glideVersion")
+
     implementation("com.squareup.okhttp3:logging-interceptor:$okHttpVersion")
     implementation("com.squareup.retrofit2:retrofit:$retrofitVersion")
     implementation("com.squareup.retrofit2:adapter-rxjava3:$retrofitVersion")
@@ -208,27 +224,33 @@ dependencies {
     implementation("com.github.chrisbanes:PhotoView:2.3.0")
     implementation("com.github.skydoves:balloon:1.6.4")
     implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
+
     implementation("org.maplibre.gl:android-sdk:10.2.0")
     implementation("org.maplibre.gl:android-plugin-annotation-v9:2.0.2")
+
     implementation("androidx.room:room-runtime:$roomVersion")
     annotationProcessor("androidx.room:room-compiler:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     implementation("androidx.room:room-rxjava3:$roomVersion")
+
     // For language detection during editing
     prodImplementation("com.google.mlkit:language-id:$mlKitVersion")
     betaImplementation("com.google.mlkit:language-id:$mlKitVersion")
     alphaImplementation("com.google.mlkit:language-id:$mlKitVersion")
     devImplementation("com.google.mlkit:language-id:$mlKitVersion")
     customImplementation("com.google.mlkit:language-id:$mlKitVersion")
+
     // For receiving push notifications for logged-in users.
     prodImplementation("com.google.firebase:firebase-messaging-ktx:$firebaseMessagingVersion")
     betaImplementation("com.google.firebase:firebase-messaging-ktx:$firebaseMessagingVersion")
     alphaImplementation("com.google.firebase:firebase-messaging-ktx:$firebaseMessagingVersion")
     devImplementation("com.google.firebase:firebase-messaging-ktx:$firebaseMessagingVersion")
     customImplementation("com.google.firebase:firebase-messaging-ktx:$firebaseMessagingVersion")
+
     debugImplementation("com.squareup.leakcanary:leakcanary-android:$leakCanaryVersion")
     implementation("com.squareup.leakcanary:plumber-android:$leakCanaryVersion")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-inline:$mockitoVersion")
     testImplementation("org.robolectric:robolectric:4.11.1")
@@ -236,6 +258,7 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:$okHttpVersion")
     testImplementation("org.hamcrest:hamcrest:2.2")
     testImplementation("androidx.room:room-testing:$roomVersion")
+
     androidTestImplementation("androidx.test.espresso:espresso-core:$espressoVersion")
     androidTestImplementation("androidx.test.espresso:espresso-contrib:$espressoVersion")
     androidTestImplementation("androidx.test.espresso:espresso-intents:$espressoVersion")
@@ -246,21 +269,21 @@ dependencies {
     androidTestUtil("androidx.test:orchestrator:1.4.2")
 }
 
-private fun setSigningConfigKey(config: SigningConfig, props: Properties?) {
-    if (props != null) {
-        config.storeFile = props["keystore"]?.let { file(it) }
-        config.storePassword = props["store.pass"] as String
-        config.keyAlias = props["key.alias"] as String
-        config.keyPassword = props["key.pass"] as String
+fun setSigningConfigKey(config: SigningConfig, props: Properties?) {
+    props?.let {
+        config.storeFile = props["keystore"]?.let { file(it.toString()) }
+        config.storePassword = props["store.pass"]?.toString()
+        config.keyAlias = props["key.alias"]?.toString()
+        config.keyPassword = props["key.pass"]?.toString()
     }
 }
 
-private fun loadProperties(file: File): Properties? {
+fun loadProperties(file: File): Properties? {
     val props = Properties()
     if (file.canRead()) {
-        props.load(FileInputStream(file))
+        props.load(file.inputStream())
     } else {
-        System.err.println("\"$file\" not found")
+        error("${file} not found")
     }
     return props
 }
